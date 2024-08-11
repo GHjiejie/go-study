@@ -39,7 +39,7 @@
    
 * 例如：`var ages map[string]int`  声明一个键为字符串、值为整数的映射。
       
-   
+  
    * **结构体 (struct):**  将不同类型的数据组合在一起形成一个新的数据类型。
    
 * 例如：
@@ -375,4 +375,185 @@ ch := make(chan int, 100)       // 创建一个缓冲区大小为 100 的整数�
 
 `make` 函数是 Go 语言中创建切片、映射和通道的常用方法，它能够预先分配内存并初始化数据结构，提高程序效率。 了解 `make` 函数的用法对于编写 Go 程序至关重要。
 
-7
+## 7.go语言里面的根据接受者的类型进行隐式类型转换？
+
+我们下面的函数
+
+```go
+package main
+
+import "fmt"
+//声明一个结构体
+type Animal struct{
+    Name string
+    Age int
+    PetName string
+}
+
+//为这个结构体添加方法(值类型的传递)
+func (a Animal) getPetName() string {
+    return a.PetName
+}
+
+//设置PetName方法(值类型传递)
+func (a Animal) setValuePetName(petname string) {
+    a.PetName=petname;
+}
+
+//设置PetName方法（引用类型的传递）
+func (a *Animal) setPointPetName(petname string) {
+    a.PetName=petname;
+}
+
+func main(){
+    
+    dog :=Animal{
+        Name:"旺财",
+        Age:3,
+        PetName:"发财",
+    }
+    
+    fmt.Println(dog.getPetName()) //发财
+    
+    dog.setValuePetName("小黄")
+    
+    fmt.Println(dog.PetName) //发财
+    
+    dog.setPointPetName("小黑")  //因为这个方法接收者是结构体指针，所以在go语言内部实际上是做了一个隐式类型转换，所以这段代码等价于 
+    // (&dog).setPointPetName("小黑")
+    
+    fmt.Println(dog.PetName) //小黑
+    
+}
+```
+
+Go语言的底层确实是根据方法接收者的类型来判断是否需要进行隐式转换。
+
+### 隐式转换的机制
+
+在Go语言中，当你调用一个方法时，Go会自动判断方法接收者的类型，并决定是否需要进行隐式的类型转换。
+
+- **值类型接收者**：如果你有一个指针类型的变量并调用一个值类型接收者的方法，Go会自动解引用该指针来获取值类型，从而调用对应的方法。
+  
+  ```go
+  dog := &Animal{Name: "旺财", Age: 3, PetName: "发财"}
+  dog.getPetName() // 等价于 (*dog).getPetName()
+  ```
+
+- **指针类型接收者**：如果你有一个值类型的变量并调用一个指针类型接收者的方法，Go会自动取该变量的地址来获取指针类型，从而调用对应的方法。
+  
+  ```go
+  dog := Animal{Name: "旺财", Age: 3, PetName: "发财"}
+  dog.setPointPetName("小黑") // 等价于 (&dog).setPointPetName("小黑")
+  ```
+
+### 何时发生隐式转换
+
+- 当方法的接收者类型与调用时的变量类型不一致时，Go会在必要时进行隐式转换。
+- 如果方法接收者是值类型，而变量是指针类型，Go会自动对指针进行解引用。
+- 如果方法接收者是指针类型，而变量是值类型，Go会自动对值取地址。
+
+### 注意
+
+- 隐式转换使得方法调用更加灵活，不需要显式地进行取地址或解引用操作。
+- 这种隐式转换只在方法接收者中发生，而不会在普通函数中自动进行。普通函数的参数类型必须与传入参数的类型严格匹配。
+
+### 总结
+
+Go语言确实根据方法的接收者类型来决定是否进行隐式转换。这种机制简化了方法调用的语法，使得代码更简洁易读，同时也保留了操作指针和引用的灵活性。
+
+
+
+## 8、go语言里面的如何实现继承？
+
+**在go语言里面实际上是没有继承的这个概念的，我们可以使用组合来实现继承的效果**
+
+通俗的来讲就是在一个结构体里面使用了另一个结构体（我们通常称这个结构体为一个基类，概念大概理解就行，不必死磕哈）
+
+```go
+package main
+
+import "fmt"
+
+// 声明一个通用的结构体，其他的结构体
+type Animal struct {
+	Name string
+	Age  int
+}
+
+// Dog结构体要实现对Animal结构体的继承
+type Dog struct {
+	Animal //里面使用了另一个结构体，或者说就是结构体嵌套，一般开发过程中最好就嵌套一层？？暂时不知道哈
+	PetName string
+}
+
+func (d *Dog) getPetName() string {
+	return d.PetName
+}
+
+func main() {
+	// 声明一个数据类型为Dog的结构体
+	dog := Dog{
+		PetName: "小黑",
+	}
+	dog.Animal.Age = 18
+	dog.Animal.Name = "黑大帅"
+    
+    //实际上下面的代码和上面两行实现的效果是一样的，但是我们需要注意的是，如果Dog这个结构体里面有字段和Animla结构体重复了（比如就是Age），那么go语言是会做一个叫就近原则的，就是说如果你现在使用dog.Age实际上是访问的是Dog结构体自己的Age字段，不会访问到Animal里面的Age字段
+	//dog.Age=18
+    //dog.Name="黑大帅"
+    
+    
+	fmt.Println(dog.getPetName())
+
+	fmt.Println(dog)
+
+}
+
+```
+
+## 9、 go里面的nil是什么？有什么作用？
+
+在 Go 语言中，`nil` 是一个特殊的预定义标识符，表示 **零值**。
+
+**`nil` 的含义:**
+
+* **指针:**  `nil` 表示一个空指针，它不指向任何内存地址。
+* **接口:**  `nil` 表示一个空接口，它没有底层类型和值。
+* **映射:**  `nil` 表示一个空映射，它不包含任何键值对。
+* **切片:**  `nil` 表示一个空切片，它没有底层数组。
+* **通道:**  `nil` 表示一个空通道，它不能发送或接收任何值。
+* **函数:**  `nil` 表示一个空函数，它不执行任何操作。
+
+
+**`nil` 的用途:**
+
+* **初始化变量:**  可以使用 `nil` 来初始化指针、接口、映射、切片、通道和函数类型的变量。
+* **判断变量是否为空:**  可以使用 `nil` 来判断变量是否为空。
+* **表示错误或缺失值:**  可以使用 `nil` 来表示错误或缺失值。
+
+
+**示例:**
+
+```go
+var p *int = nil  // 初始化一个空指针
+var m map[string]int = nil  // 初始化一个空映射
+var s []int = nil  // 初始化一个空切片
+var c chan int = nil  // 初始化一个空通道
+
+if p == nil {
+    fmt.Println("p is nil")
+}
+
+if err != nil {
+    fmt.Println("Error:", err)
+}
+```
+
+
+**总结:**
+
+`nil` 是 Go 语言中一个重要的概念，它表示零值，可以用于初始化变量、判断变量是否为空，以及表示错误或缺失值。
+
+
+希望以上解释能够帮助你理解 Go 语言中的 `nil`！
