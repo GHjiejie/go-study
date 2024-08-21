@@ -1063,9 +1063,13 @@ func main(){
 
 背景:给一个worker分配了超级多的任务，但是其他的worker分配的任务非常少，这个情况需要我们去避免的
 
+了解到go语言内部帮你处理了这个过程
+
 
 
 ## 17、如何理解Go语言里面的Context(上下文)
+
+[参考文章](https://go.cyub.vip/concurrency/context/)
 
 ###  [实现Context接口的类型](https://go.cyub.vip/concurrency/context/#实现context接口的类型-1)
 
@@ -1079,6 +1083,21 @@ Context一共有4个类型实现了Context接口, 分别是`emptyCtx`, `cancelCt
 | cancelCtx | WithCancel()                 | 可取消的context                       |
 | timerCtx  | WithDeadline()/WithTimeout() | 可取消的context，过期或超时会自动取消 |
 | valueCtx  | WithValue()                  | 可存储共享信息的context               |
+
+### 我的理解：
+
+我们在使用context的时候一定要对这个ctx进行初始化，使用这个context.Background()实现初始化，如果我们在程序代码里面不初始化就去传递这个context，那么代码在运行过程中就会报错
+
+对于像WithCancel()、withDeadline()、等With函数，实际上是为这个context添加一个附加条件
+
+我们可以将其理解为对context进行一个拓展，比如说下面的例子：
+
+```go
+//为context设置超时时间,协程在执行job的时候如果work时间超过3s，就会退出当前gorountine的执行
+ctx,cnacel :=context.WithTimeout(context.Background(),3*time.Second)
+```
+
+
 
 ###  [Context实现两种递归](https://go.cyub.vip/concurrency/context/#context实现两种递归)
 
@@ -1096,6 +1115,85 @@ Context实现两种方向的递归操作。
 1. 不要将Context作为结构体的一个字段存储，相反而应该显示传递Context给每一个需要它的函数，Context应该作为函数的第一个参数，并命名为ctx
 2. 不要传递一个nil Context给一个函数，即使该函数能够接受它。如果你不确定使用哪一个Context，那你就传递context.TODO
 3. context是并发安全的，相同的Context能够传递给运行在不同goroutine的函数
+
+## 18、使用context与不使用context的对比
+
+在 Go 语言中，使用 `context` 的主要目的是为了有效管理并发和确保操作的可控性。下面是使用 `context` 的原因以及不使用它可能带来的弊端。
+
+### 使用 Context 的原因
+
+1. **取消信号**：
+   - `context` 提供了一种机制，用于向 goroutines 发送取消信号。当某个操作完成或超时，你可以通过上下文来通知相关的 goroutine 停止其工作。这有助于避免长时间运行的任务阻塞系统资源。
+
+2. **超时控制**：
+   - 可以设置任务的截止时间（超时），确保程序在规定的时间内完成。如果超过了时间限制，可以自动取消正在进行的工作，从而提高程序的响应能力。
+
+3. **传递请求范围的数据**：
+   - `context` 允许在多个 goroutine 之间传递请求范围的数据，例如用户信息、认证令牌等。这使得在并发处理请求时，不必每次都传递大量参数，而只需将 `context` 传入即可。
+
+4. **增强代码的可读性和一致性**：
+   - 明确地传递 `context` 作为函数的第一个参数，使得函数与上下文之间的关系更加清晰。这提高了代码的可理解性，使其他开发者更容易维护和使用。
+
+5. **并发安全**：
+   - `context` 是并发安全的，适合在多个 goroutine 中共享。这样可以避免数据竞争和状态不一致的问题。
+
+### 不使用 Context 的弊端
+
+如果不使用 `context`，可能会遇到以下问题：
+
+1. **无法优雅地取消操作**：
+   - 没有上下文机制时，无法方便地取消正在执行的 goroutine。这会导致可能长时间运行的任务无法被终止，造成资源浪费和潜在的死锁情况。
+
+2. **难以实现超时控制**：
+   - 如果没有上下文，手动实现超时逻辑将变得复杂且容易出错。你需要在每个 goroutine 中编写逻辑来检查超时，并相应地停止任务。
+
+3. **传递参数麻烦**：
+   - 在没有上下文的情况下，如果需要在多个 goroutine 之间传递请求信息（如用户 ID 或其他元数据），通常需要显式地传递这些参数，这会使函数签名变得冗长且不易维护。
+
+4. **缺乏一致性**：
+   - 如果不同的部分代码对上下文的处理方式不一致，会导致代码风格混乱。使用 `context` 规范化了代码中的并发模式，使得所有需要上下文的地方都有相同的处理方式。
+
+5. **影响可测试性和可维护性**：
+   - 由于缺乏结构化的错误处理和状态管理，未使用上下文的代码通常难以测试和维护。
+
+### 示例
+
+以下是一个示例，演示如何使用上下文来优雅地处理取消和超时情况：
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func doWork(ctx context.Context) {
+	select {
+	case <-time.After(5 * time.Second): // 模拟工作
+		fmt.Println("Work completed")
+	case <-ctx.Done(): // 响应取消信号
+		fmt.Println("Work canceled:", ctx.Err())
+	}
+}
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) // 设置超时
+	defer cancel() // 确保在退出时调用 cancel
+
+	go doWork(ctx) // 启动 goroutine 执行工作
+
+	time.Sleep(3 * time.Second) // 主线程等待
+}
+```
+
+在这个示例中，由于 `doWork` 的模拟工作需要 5 秒，而上下文设置的超时时间只有 2 秒，所以当达到超时时间后，`doWork` 会输出“Work canceled: context deadline exceeded”。
+
+### 总结
+
+- 使用 `context` 能够显著提高 Go 程序的可控性、可读性和可靠性。
+- 不使用 `context` 可能导致一系列问题，包括无法取消操作、复杂的超时管理和难以维护的代码。因此，在编写并发程序时，推荐始终使用 `context` 来管理 goroutine 的生命周期和请求范围的信息。
 
 
 
