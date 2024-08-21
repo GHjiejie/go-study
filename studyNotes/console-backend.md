@@ -50,6 +50,71 @@
 11. **`version/`**
     - 可能用于记录版本信息或版本控制相关的数据，但具体内容未列出。
 
-### 总结
+### day-001
 
-整个项目结构设计良好，符合 Go 项目的最佳实践。模块划分明确，有助于代码的管理和维护。同时，结合 Docker 和 Helm charts，表明该项目可能面向云原生环境，具备良好的可扩展性和部署能力。
+我们按照思路来，主要从这个 `ConsoleServer方法入手`
+
+```go
+func NewConsoleServer(c *config.Config) (*ConsoleServer, error) {
+
+	// 处理数据库
+	dbEngine, err := db.NewHandler(c.DBConfig)
+	if err != nil {
+		log.Errorf("failed to create db engine handler with err(%s)", err.Error())
+		return nil, err
+	}
+
+	// 权限管理与认证
+	casbinPermit, err := casbinpermit.NewPermit(dbEngine.GetORMDB())
+	if err != nil {
+		log.Errorf("new casbin permit policys failed with err(%s)", err.Error())
+		return nil, err
+	}
+
+	if err := casbinPermit.Enforcer.LoadPolicy(); err != nil {
+		log.Errorf("failed to load casbin permit policys with err(%s)", err.Error())
+		return nil, err
+	}
+
+	// 初始化 Kubernetes
+	kube, err := cluster.NewKube(c)
+	if err != nil {
+		log.Errorf("get kube failed with err(%s)", err.Error())
+		return nil, err
+	}
+
+	// 初始化 Kong
+	kong, err := kong.NewKong(c)
+	if err != nil {
+		log.Fatal("failed to create kong interface failed: ", err)
+	}
+
+	// 初始化安全管理和认证
+	securMgr := secu.NewSecurityManager(c, kube)
+	auth := auth.NewAuth(dbEngine, c, casbinPermit)
+
+	// 初始化监控管理
+	alertChan := make(chan []byte)
+	monitorMgr := monitor.NewMonitorMgr(dbEngine, alertChan)
+
+	// 创建 ConsoleServer 实例
+	s := &ConsoleServer{
+		config:        c,
+		DBEngine:      dbEngine,
+		casbinPerimit: casbinPermit,
+		auth:          auth,
+		kong:          kong,
+		securMgr:      securMgr,
+		monitorMgr:    monitorMgr,
+		apiKeyDelJob:  NewAPIKeyDeleteJob(dbEngine),
+	}
+
+	if err := s.prepareServer(); err != nil {
+		log.Error("Failed to prepare server:", err)
+		return nil, err
+	}
+
+	return s, nil
+}
+```
+
