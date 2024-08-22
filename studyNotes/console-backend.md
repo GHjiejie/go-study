@@ -1,6 +1,6 @@
 根据你提供的项目结构，这个 Go 项目（名为 `CONSOLE-BACKEND`）看起来是一个较为复杂的后端应用。下面对其各个部分进行分析：
 
-### 项目结构分析
+## 项目结构分析
 
 1. **根目录**
    - `.makerc`、`.gitignore`、`.gitlab-ci.yml`、`.golangci.yml`、`.gometalinter`：这些文件通常与代码质量、版本控制和持续集成相关。
@@ -50,7 +50,7 @@
 11. **`version/`**
     - 可能用于记录版本信息或版本控制相关的数据，但具体内容未列出。
 
-### day-001
+## day-001
 
 我们按照思路来，主要从这个 `ConsoleServer方法入手`
 
@@ -118,3 +118,80 @@ func NewConsoleServer(c *config.Config) (*ConsoleServer, error) {
 }
 ```
 
+## day-002
+
+这段代码是 Casbin 权限管理框架的配置字符串，定义了如何进行权限控制和访问决策。下面对每个部分进行详细解释：
+
+对casbin的配置我们可以查看下面的博客
+
+[casbin权限管理](https://darjun.github.io/2020/06/12/godailylib/casbin/)
+
+
+
+### 1. 请求定义 (`request_definition`)
+
+```plaintext
+[request_definition]
+r = sub, obj, act
+```
+
+- **目的**: 定义请求的格式。
+- **字段**:
+  - `sub`: 请求主体（subject），通常是用户身份，如用户名或用户ID。
+  - `obj`: 请求对象（object），指请求的资源，例如 API 路径 `/v1/users`。
+  - `act`: 请求动作（action），表示用户对对象执行的操作类型，例如 `GET`, `POST`, `DELETE`。
+
+### 2. 策略定义 (`policy_definition`)
+
+```plaintext
+[policy_definition]
+p = sub, obj, act
+```
+
+- **目的**: 定义策略的格式。
+- **字段**:
+  - `sub`: 策略中的主体，与请求定义中的 `sub` 相同。
+  - `obj`: 策略中的对象，与请求定义中的 `obj` 相同。
+  - `act`: 策略中的动作，与请求定义中的 `act` 相同。
+- **作用**: 每条策略规定了某个主体对某个对象可以执行的动作，形成访问控制规则。
+
+### 3. 角色定义 (`role_definition`)
+
+```plaintext
+[role_definition]
+g = _, _
+```
+
+- **目的**: 定义角色和用户之间的关系。
+- **字段**:
+  - `g`: 表示用户到角色的映射关系，其中 `_` 表示任意值。
+- **作用**: 通过角色来组织用户，使得可以为多个用户赋予相同的权限。例如，可以将多个用户定义为管理员角色，以便他们都可以访问特定资源。
+
+### 4. 策略效果 (`policy_effect`)
+
+```plaintext
+[policy_effect]
+e = some(where (p.eft == allow))
+```
+
+- **目的**: 决定请求是否被允许。
+- **逻辑**:
+  - `some(where (p.eft == allow))`: 只要至少有一条策略的效果为 `allow`，则请求被允许。
+- **作用**: 实现灵活的访问控制逻辑，只需满足其中一条策略即可放行请求。
+
+### 5. 匹配器 (`matchers`)
+
+```plaintext
+[matchers]
+m = g(r.sub, p.sub) && keyMatch(r.obj, p.obj) && (r.act == p.act || p.act == "*")
+```
+
+- **目的**: 定义请求与策略之间的匹配条件。
+- **组成部分**:
+  - `g(r.sub, p.sub)`: 检查请求主体是否与策略主体匹配，支持角色层级关系。
+  - `keyMatch(r.obj, p.obj)`: 使用路径匹配方法检查请求对象与策略对象是否匹配，支持模糊匹配（例如 `/v1/users/*`）。
+  - `(r.act == p.act || p.act == "*")`: 检查请求动作是否与策略动作匹配，或者策略动作为 `"*"` 时匹配所有动作。
+  
+### 总体功能
+
+这段配置定义了 Casbin 的核心结构，包括如何描述请求、策略、角色以及如何判断请求是否符合特定的策略。整体上，它提供了一个灵活且强大的权限管理机制，使得应用程序能够根据不同的需求有效地控制访问权限。通过这样的配置，开发者可以构建复杂的访问控制逻辑，适应不同场景的需求。
