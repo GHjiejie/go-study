@@ -195,3 +195,167 @@ m = g(r.sub, p.sub) && keyMatch(r.obj, p.obj) && (r.act == p.act || p.act == "*"
 ### 总体功能
 
 这段配置定义了 Casbin 的核心结构，包括如何描述请求、策略、角色以及如何判断请求是否符合特定的策略。整体上，它提供了一个灵活且强大的权限管理机制，使得应用程序能够根据不同的需求有效地控制访问权限。通过这样的配置，开发者可以构建复杂的访问控制逻辑，适应不同场景的需求。
+
+## day-003
+
+这些 SQL 语句定义了一些表，它们在一个名为 `console_backend` 的数据库中用于管理用户、监控警报及其相关信息。以下是对每个表的详细解释：
+
+### 1. users 表
+
+```sql
+CREATE TABLE IF NOT EXISTS `users` (
+    `id` int NOT NULL AUTO_INCREMENT,
+    `username` varchar(128) NOT NULL comment '用户登录名',
+    `password` varchar(128) NOT NULL comment '用户密码',
+    `role` tinyint DEFAULT '0' comment '角色',
+    `token` varchar(1024) comment '用户token',
+    `created_at` datetime NOT NULL DEFAULT NOW() comment '创建时间',
+    `updated_at` datetime NOT NULL DEFAULT NOW() ON UPDATE NOW() comment '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_users_on_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+```
+
+- **作用**: 存储用户的基本信息。
+- **字段**:
+  - `id`: 用户的唯一标识符，自动递增。
+  - `username`: 用户登录名，唯一且不允许为空。
+  - `password`: 用户密码，存储加密后的值。
+  - `role`: 用户角色，默认为 `0`（可能表示普通用户）。
+  - `token`: 用于身份验证的用户 token。
+  - `created_at`: 用户创建时间。
+  - `updated_at`: 用户信息最后更新时间。
+
+### 2. captchas 表
+
+```sql
+CREATE TABLE IF NOT EXISTS `captchas` (
+    `captcha_id` varchar(100),
+    `digits` varchar(100),
+    `created_at` datetime NOT NULL DEFAULT NOW() comment '创建时间',
+    UNIQUE KEY `uk_captchas_on_captcha_id` (`captcha_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+```
+
+- **作用**: 存储验证码信息。
+- **字段**:
+  - `captcha_id`: 验证码的唯一标识符。
+  - `digits`: 验证码的字符内容。
+  - `created_at`: 验证码创建时间。
+
+### 3. monitor_alerts 表
+
+```sql
+CREATE TABLE IF NOT EXISTS `monitor_alerts` (
+    `id` int NOT NULL AUTO_INCREMENT,
+    `fingerprint` varchar(32) NOT NULL,
+    `name` varchar(128) NOT NULL,
+    `status` TINYINT NOT NULL comment '0: resolved; 1: firing',
+    `level` varchar(32) NOT NULL,
+    `prometheus` varchar(32) NOT NULL,
+    `container` varchar(128),
+    `pod` varchar(128),
+    `namespace` varchar(32),
+    `node` varchar(32),
+    `summary` varchar(1024) NOT NULL,
+    `description` varchar(1024) NOT NULL,
+    `generator_url` varchar(1024) NOT NULL,
+    `starts_at` datetime NOT NULL,
+    `created_at` datetime NOT NULL DEFAULT NOW() comment '创建时间',
+    `updated_at` datetime NOT NULL ON UPDATE NOW() comment '更新时间',
+    `last_at` datetime NOT NULL DEFAULT NOW() comment '最后告警时间',
+    PRIMARY KEY(`id`),
+    UNIQUE KEY `uk_alert_fingerprint`(`fingerprint`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+```
+
+- **作用**: 存储监控系统生成的警报。
+- **字段**:
+  - `id`: 警报的唯一标识符，自动递增。
+  - `fingerprint`: 警报的指纹，用于区分相似的警报。
+  - `name`: 警报的名称。
+  - `status`: 警报状态，0 表示已解决，1 表示正在触发。
+  - `level`: 警报的严重性级别。
+  - `prometheus`: 与 Prometheus 监控系统相关的配置。
+  - 其他字段如 `container`, `pod`, `namespace`, `node` 提供了与 Kubernetes 资源的关联信息。
+  - `summary` 和 `description`: 警报的总结和详细描述。
+  - `generator_url`: 生成该警报的源 URL。
+  - `starts_at`: 警报开始时间。
+  - `created_at`, `updated_at`, `last_at`: 时间戳记录。
+
+### 4. monitor_alert_histories 表
+
+```sql
+CREATE TABLE IF NOT EXISTS `monitor_alert_histories` (
+    `id` int NOT NULL AUTO_INCREMENT,
+    `alert_id` int NOT NULL,
+    `status` TINYINT NOT NULL comment '0: resolved; 1: firing',
+    `level` varchar(32) NOT NULL,
+    `created_time` datetime NOT NULL DEFAULT NOW() comment '创建时间',
+    `updated_time` datetime NOT NULL DEFAULT NOW() ON UPDATE NOW() comment '更新时间',
+    PRIMARY KEY(`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+```
+
+- **作用**: 存储警报的历史记录。
+- **字段**:
+  - `id`: 历史记录的唯一标识符，自动递增。
+  - `alert_id`: 关联到 `monitor_alerts` 表中的警报 ID。
+  - `status`: 当前警报状态，0 为已解决，1 为触发中。
+  - `level`: 警报的严重性级别。
+  - `created_time` 和 `updated_time`: 记录创建和更新时间。
+
+### 5. monitor_subscribers 表
+
+```sql
+CREATE TABLE IF NOT EXISTS `monitor_subscribers` (
+    `id` int NOT NULL AUTO_INCREMENT,
+    `url` varchar(1024) NOT NULL comment '订阅URL',
+    `created_time` datetime NOT NULL DEFAULT NOW() comment '创建时间',
+    `updated_time` datetime NOT NULL DEFAULT NOW() ON UPDATE NOW() comment '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_subscribers_on_url` (`url`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+```
+
+- **作用**: 存储监控系统的订阅者信息。
+- **字段**:
+  - `id`: 订阅者的唯一标识符，自动递增。
+  - `url`: 订阅者的回调 URL，用于接收警报通知。
+  - `created_time` 和 `updated_time`: 记录创建和更新时间。
+
+### 6. user_api_keys 表
+
+```sql
+CREATE TABLE IF NOT EXISTS `user_api_keys` (
+    `id` int NOT NULL AUTO_INCREMENT,
+    `username` varchar(128) NOT NULL comment '用户名',
+    `api_key` varchar(255) NOT NULL comment 'api key',
+    `created_at` datetime NOT NULL comment '创建时间',
+    `expired_at` datetime NOT NULL comment '过期时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_username_api_key` (`username`, `api_key`),
+    INDEX `idx_created_at`(`created_at`),
+    INDEX `idx_expired_at`(`expired_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+```
+
+- **作用**: 存储用户的 API 密钥信息。
+- **字段**:
+  - `id`: API 密钥的唯一标识符，自动递增。
+  - `username`: 关联的用户名。
+  - `api_key`: 用户的 API 密钥，用于身份验证。
+  - `created_at`: 密钥创建时间。
+  - `expired_at`: 密钥过期时间。
+  - 唯一键约束保证同一用户名只能有一组特定的 API 密钥。
+  - 索引 `idx_created_at` 和 `idx_expired_at` 用于优化查询性能。
+
+### 总结
+
+这些表共同构成了一个完整的用户管理和监控系统。具体功能包括：
+
+- **用户管理**: `users` 表用于存储用户的基本信息，`user_api_keys` 表存储与用户相关的 API 密钥。
+- **验证码处理**: `captchas` 表用于管理用户登录等功能中的验证码。
+- **监控管理**: `monitor_alerts` 和 `monitor_alert_histories` 表分别用于存储当前激活的警报和它们的历史记录，而 `monitor_subscribers` 表则存储订阅了警报的客户端信息。
+
+这种结构化的设计提供了强大的数据支持，以便于实现用户权限控制、监控告警和日志记录等功能。
